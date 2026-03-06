@@ -10,7 +10,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import transformers
-import transformers.modeling_flash_attention_utils
+try:
+    import transformers.modeling_flash_attention_utils
+except ImportError:
+    pass
 from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
 from peft import PeftModel, get_peft_model_state_dict
 from torch import distributed as dist
@@ -74,7 +77,10 @@ class DeepspeedStrategy(ABC):
             transformers.enable_full_determinism(self.seed)
             # Use deterministic backward in flash attention as, by default, flash attention uses atomic adds
             # https://github.com/Dao-AILab/flash-attention/commit/732654583c2e640adc012ecb60e460bf19dcd9e3
-            transformers.modeling_flash_attention_utils.deterministic_g = True
+            try:
+                transformers.modeling_flash_attention_utils.deterministic_g = True
+            except AttributeError:
+                pass
         else:
             transformers.set_seed(self.seed)
 
@@ -102,6 +108,11 @@ class DeepspeedStrategy(ABC):
             return
 
         ring_head_stride = getattr(self.args, "ring_head_stride", 1)
+
+        # Select communication backend based on device type
+        _npu_available = hasattr(torch, "npu") and torch.npu.is_available()
+        comm_backend = "hccl" if _npu_available else "nccl"
+
         for i in range(dist.get_world_size() // self.ring_attn_size):
             ring_attn_ranks = list(
                 range(
@@ -109,13 +120,19 @@ class DeepspeedStrategy(ABC):
                     (i + 1) * self.ring_attn_size,
                 )
             )
-            group = dist.new_group(ranks=ring_attn_ranks, backend="nccl",timeout=timedelta(minutes=60))
+            group = dist.new_group(ranks=ring_attn_ranks, backend=comm_backend, timeout=timedelta(minutes=60))
             if dist.get_rank() in ring_attn_ranks:
                 set_ring_attn_group(group)
                 self.ring_attn_rank = dist.get_rank(group=group)
                 self.ring_attn_ranks = ring_attn_ranks
 
-        from ring_flash_attn import substitute_hf_flash_attn
+        try:
+            from ring_flash_attn import substitute_hf_flash_attn
+        except ImportError:
+            raise RuntimeError(
+                "ring_flash_attn package is required for ring attention (ring_attn_size > 1) "
+                "but was not found. Please install it or set ring_attn_size=1."
+            )
 
         substitute_hf_flash_attn(self.ring_attn_group, ring_head_stride)
         substitute_ring_flash_attn()

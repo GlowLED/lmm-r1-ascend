@@ -75,7 +75,7 @@ def get_llm_for_sequence_regression(
     base_model_type = PretrainedConfig.from_pretrained(model_name_or_path).model_type
     config = AutoConfig.from_pretrained(model_name_or_path,trust_remote_code= base_model_type not in CONFIG_MAPPING)
     config.normalize_reward = normalize_reward
-    config._attn_implementation = "flash_attention_2" if use_flash_attention_2 else "eager"
+    config._attn_implementation = "flash_attention_2" if use_flash_attention_2 else "sdpa"
 
     # Prioritize using the value_head_prefix in the model configuration.
     value_head_prefix = getattr(config, "value_head_prefix", value_head_prefix)

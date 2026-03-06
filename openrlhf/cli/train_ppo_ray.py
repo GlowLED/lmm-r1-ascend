@@ -450,8 +450,12 @@ if __name__ == "__main__":
 
     if args.packing_samples:
         if not args.flash_attn:
-            print("[Warning] Please --flash_attn to accelerate when --packing_samples is enabled.")
-            args.flash_attn = True
+            from openrlhf.utils.flash_attn_compat import FLASH_ATTN_AVAILABLE
+            if FLASH_ATTN_AVAILABLE:
+                print("[Warning] Please --flash_attn to accelerate when --packing_samples is enabled.")
+                args.flash_attn = True
+            else:
+                print("[Info] flash_attn not available, using sdpa backend for packing_samples.")
         assert args.vllm_num_engines > 0, "Only support `--packing_samples` with vLLM."
 
     if args.vllm_enable_sleep and not args.colocate_all_models:

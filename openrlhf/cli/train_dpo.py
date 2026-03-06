@@ -288,8 +288,12 @@ if __name__ == "__main__":
         )
 
     if args.packing_samples and not args.flash_attn:
-        print("[Warning] Please --flash_attn to accelerate when --packing_samples is enabled.")
-        args.flash_attn = True
+        from openrlhf.utils.flash_attn_compat import FLASH_ATTN_AVAILABLE
+        if FLASH_ATTN_AVAILABLE:
+            print("[Warning] Please --flash_attn to accelerate when --packing_samples is enabled.")
+            args.flash_attn = True
+        else:
+            print("[Info] flash_attn not available, using sdpa backend for packing_samples.")
 
     if args.ring_attn_size > 1:
         assert args.packing_samples, "packing_samples must be enabled when using ring attention"

@@ -4,7 +4,7 @@ datasets
 deepspeed==0.16.7
 einops
 flask
-flash-attn==2.7.4.post1
+# flash-attn==2.7.4.post1  # Optional: only needed on CUDA. Not available on Ascend NPU.
 isort
 jsonlines
 loralib

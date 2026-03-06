@@ -1,7 +1,6 @@
 import torch
 import torch.distributed as dist
-from flash_attn.bert_padding import index_first_axis, pad_input, rearrange, unpad_input
-from flash_attn.utils.distributed import all_gather
+from openrlhf.utils.flash_attn_compat import index_first_axis, pad_input, rearrange, unpad_input, all_gather
 
 RING_ATTN_GROUP = None
 
@@ -49,7 +48,13 @@ def update_ring_attn_params(cu_seqlens):
     """
     assert RING_ATTN_GROUP is not None
 
-    from ring_flash_attn import update_ring_flash_attn_params
+    try:
+        from ring_flash_attn import update_ring_flash_attn_params
+    except ImportError:
+        raise RuntimeError(
+            "ring_flash_attn package is required for ring attention (ring_attn_size > 1) "
+            "but was not found. Please install it or set ring_attn_size=1."
+        )
 
     update_ring_flash_attn_params(cu_seqlens, RING_ATTN_GROUP)
 
@@ -182,8 +187,13 @@ HACKED_POSITION_IDS = None
 
 #Both ring and our hack substitute flash_attn. This func must be called after ring's substitue_hf_flash_attn.
 def substitute_ring_flash_attn():
-    import transformers
-    raw_flash_attention_forward = transformers.modeling_flash_attention_utils._flash_attention_forward
+    try:
+        import transformers.modeling_flash_attention_utils
+        raw_flash_attention_forward = transformers.modeling_flash_attention_utils._flash_attention_forward
+    except (ImportError, AttributeError):
+        # transformers version without flash attention utils or _flash_attention_forward not present
+        return
+
     def _hacked_flash_attention_forward(*args,**kwargs):
         global HACKED_POSITION_IDS
         if HACKED_POSITION_IDS is not None:
