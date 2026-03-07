@@ -67,7 +67,6 @@ sleep 10
 # Start remote reward model server
 echo "Starting remote reward model server..."
 ${PYTHON_EXEC} -m openrlhf.models.remote_rm.math_verifier \
-    --dataset "${DATASET_PATH}" \
     --input_key message \
     --prompt-template chatml 2>&1 | tee -a "${CUR_LOG_DIR}/remote_rm.log" &
 REMOTE_RM_PID=$!
