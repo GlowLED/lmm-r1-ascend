@@ -27,3 +27,4 @@ wheel
 loguru
 torch_npu==2.9.0
 torchvision 
+deepspeed
