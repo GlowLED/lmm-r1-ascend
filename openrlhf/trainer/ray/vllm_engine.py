@@ -49,6 +49,24 @@ class LLMRayActor:
         self.requests = {}
         self.response_queues = defaultdict(queue.Queue)
 
+        # Patch huggingface_hub validator for transformers 5.x compatibility:
+        # transformers 5.x calls hub functions whose @validate_hf_hub_args decorator
+        # rejects local filesystem paths (containing multiple '/') before checking
+        # if the path is a local directory. Allow paths that exist on disk.
+        try:
+            import huggingface_hub.utils._validators as _hf_validators
+
+            _orig_validate = _hf_validators.validate_repo_id
+
+            def _validate_repo_id_allow_local(repo_id):
+                if isinstance(repo_id, str) and os.path.exists(repo_id):
+                    return
+                return _orig_validate(repo_id)
+
+            _hf_validators.validate_repo_id = _validate_repo_id_allow_local
+        except Exception:
+            pass
+
         import vllm
 
         full_determinism = kwargs.pop("full_determinism", False)

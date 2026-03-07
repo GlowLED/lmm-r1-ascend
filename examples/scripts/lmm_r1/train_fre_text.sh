@@ -57,7 +57,6 @@ ray start --head --node-ip-address 0.0.0.0 --num-gpus 8 --temp-dir ~/.cache/ray
 # Start remote reward model server
 echo "Starting remote reward model server..."
 python -m openrlhf.models.remote_rm.math_verifier \
-    --dataset "${DATASET_PATH}" \
     --input_key message \
     --prompt-template chatml 2>&1 | tee -a "${CUR_LOG_DIR}/remote_rm.log" &
 REMOTE_RM_PID=$!
@@ -103,7 +102,6 @@ ray job submit --address="http://127.0.0.1:8265" \
    --input_key message \
    --label_key "answer" \
    --normalize_reward \
-   --flash_attn \
    --lambd 1 \
    --gamma 1 \
    --gradient_checkpointing \
