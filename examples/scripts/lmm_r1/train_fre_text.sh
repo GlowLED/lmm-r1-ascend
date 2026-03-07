@@ -54,7 +54,18 @@ echo "================================================================"
 echo "Starting ray..."
 ray start --head --node-ip-address 0.0.0.0 --num-gpus 8 --temp-dir ~/.cache/ray
 
-# Start remote reward model server
+# Wait for Ray dashboard to be ready
+echo "Waiting for Ray dashboard to initialize..."
+for i in $(seq 1 30); do
+    if curl -s http://127.0.0.1:8265/api/version > /dev/null 2>&1; then
+        echo "Ray dashboard is ready (after ${i}s)."
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo "WARNING: Ray dashboard not ready after 30s, proceeding anyway..."
+    fi
+    sleep 1
+done
 echo "Starting remote reward model server..."
 python -m openrlhf.models.remote_rm.math_verifier \
     --input_key message \

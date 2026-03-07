@@ -61,8 +61,17 @@ echo "Starting ray..."
 ${RAY_EXEC} start --head --node-ip-address 0.0.0.0 --num-gpus 8 --temp-dir ~/.cache/ray
 
 # 等待 Ray 的 Dashboard 服务在 8265 端口完全启动！
-echo "Waiting for Ray dashboard to initialize (10 seconds)..."
-sleep 10
+echo "Waiting for Ray dashboard to initialize..."
+for i in $(seq 1 30); do
+    if curl -s http://127.0.0.1:8265/api/version > /dev/null 2>&1; then
+        echo "Ray dashboard is ready (after ${i}s)."
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo "WARNING: Ray dashboard not ready after 30s, proceeding anyway..."
+    fi
+    sleep 1
+done
 
 # Start remote reward model server
 echo "Starting remote reward model server..."
