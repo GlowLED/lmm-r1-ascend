@@ -60,18 +60,9 @@ echo "================================================================"
 echo "Starting ray..."
 ${RAY_EXEC} start --head --node-ip-address 0.0.0.0 --num-gpus 8 --temp-dir ~/.cache/ray
 
-# 等待 Ray 的 Dashboard 服务在 8265 端口完全启动！
-echo "Waiting for Ray dashboard to initialize..."
-for i in $(seq 1 30); do
-    if curl -s http://127.0.0.1:8265/api/version > /dev/null 2>&1; then
-        echo "Ray dashboard is ready (after ${i}s)."
-        break
-    fi
-    if [ $i -eq 30 ]; then
-        echo "WARNING: Ray dashboard not ready after 30s, proceeding anyway..."
-    fi
-    sleep 1
-done
+# 等待 Ray GCS 就绪
+echo "Waiting for Ray to be ready..."
+sleep 5
 
 # Start remote reward model server
 echo "Starting remote reward model server..."
@@ -80,11 +71,16 @@ ${PYTHON_EXEC} -m openrlhf.models.remote_rm.math_verifier \
     --prompt-template chatml 2>&1 | tee -a "${CUR_LOG_DIR}/remote_rm.log" &
 REMOTE_RM_PID=$!
 
-# Start training
+# 等待 reward model 启动
+sleep 5
+
+# Start training (直接运行，通过 RAY_ADDRESS 连接 Ray 集群，不依赖 dashboard)
 echo "Starting training..."
-${RAY_EXEC} job submit --address="http://127.0.0.1:8265" \
-   --runtime-env-json="{\"working_dir\": \"${WORKSPACE_DIR}\",\"env_vars\":{\"VLLM_USE_V1\":\"1\",\"VLLM_ENABLE_V1_MULTIPROCESSING\":\"0\"}}" \
-   -- ${PYTHON_EXEC} -m openrlhf.cli.train_ppo_ray \
+export RAY_ADDRESS="0.0.0.0:6379"
+export VLLM_USE_V1=1
+export VLLM_ENABLE_V1_MULTIPROCESSING=0
+
+${PYTHON_EXEC} -m openrlhf.cli.train_ppo_ray \
    --ref_num_nodes 1 \
    --ref_num_gpus_per_node 8 \
    --remote_rm_url http://127.0.0.1:5000/get_reward \
