@@ -16,9 +16,9 @@ RAY_EXEC="/usr/local/bin/ray"
 
 # =================== User Configuration ===================
 export WORKSPACE_DIR="$(pwd)"                      
-export DATASET_PATH="./data/deepscaler/deepscaler_message.jsonl"  
-export PRETRAIN_MODEL_PATH="./models/Qwen2.5-VL-3B-Instruct"  
-export SAVE_PATH="./checkpoints"                   
+export DATASET_PATH="${WORKSPACE_DIR}/data/deepscaler/deepscaler_message.jsonl"  
+export PRETRAIN_MODEL_PATH="${WORKSPACE_DIR}/models/Qwen2.5-VL-3B-Instruct"  
+export SAVE_PATH="${WORKSPACE_DIR}/checkpoints"                   
 
 # Model configuration
 export MODEL_NAME="lmm-r1-fre-text"              
