@@ -52,14 +52,15 @@ class LLMRayActor:
         # Patch huggingface_hub validator for transformers 5.x compatibility:
         # transformers 5.x calls hub functions whose @validate_hf_hub_args decorator
         # rejects local filesystem paths (containing multiple '/') before checking
-        # if the path is a local directory. Allow paths that exist on disk.
+        # if the path is a local directory. Skip validation for anything that looks
+        # like a local path, and let downstream code handle "file not found" properly.
         try:
             import huggingface_hub.utils._validators as _hf_validators
 
             _orig_validate = _hf_validators.validate_repo_id
 
             def _validate_repo_id_allow_local(repo_id):
-                if isinstance(repo_id, str) and os.path.exists(repo_id):
+                if isinstance(repo_id, str) and repo_id.startswith(os.sep):
                     return
                 return _orig_validate(repo_id)
 
