@@ -13,6 +13,7 @@ from tqdm import tqdm
 from openrlhf.models import Actor, get_llm_for_sequence_regression
 from openrlhf.trainer.ray.utils import ray_noset_visible_devices
 from openrlhf.utils.deepspeed import DeepspeedStrategy
+from openrlhf.utils.device_utils import current_device, empty_cache, synchronize
 from openrlhf.models.lmm_kits.base.data_processor import MMInputs
 
 
@@ -36,6 +37,16 @@ class DistributedTorchRayActor:
         # RAY_EXPERIMENTAL_NOSET_*_VISIBLE_DEVICES is set, so
         # set local rank to 0 when the flag is not applicable.
         os.environ["LOCAL_RANK"] = str(ray.get_gpu_ids()[0]) if ray_noset_visible_devices() else "0"
+
+        # Ascend NPU: ensure ASCEND_RT_VISIBLE_DEVICES is set so that
+        # each training actor uses the correct NPU device.
+        try:
+            import torch_npu  # noqa: F401
+            gpu_ids = ray.get_gpu_ids()
+            if gpu_ids:
+                os.environ["ASCEND_RT_VISIBLE_DEVICES"] = str(int(gpu_ids[0]))
+        except ImportError:
+            pass
 
     @staticmethod
     def _get_current_node_ip():
@@ -63,8 +74,8 @@ class BasePPORole(DistributedTorchRayActor):
         raise NotImplementedError()
 
     def empty_cache(self) -> None:
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+        empty_cache()
+        synchronize()
 
     def execute_batch(self, method_name: str, **kwargs):
         """Process input data by calling specified function for each item in the lists.
@@ -133,7 +144,7 @@ class ReferenceModelRayActor(BasePPORole):
         packed_seq_lens: Optional[list[int]] = None,
         visual_inputs: Optional[MMInputs] = None,
     ) -> torch.Tensor:
-        device = torch.cuda.current_device()
+        device = current_device()
         with torch.no_grad():
             log_probs = self.model(
                 sequences.to(device),
@@ -179,7 +190,7 @@ class RewardModelRayActor(BasePPORole):
         pad_sequence=False,
         visual_inputs: Optional[MMInputs] = None,
     ) -> torch.Tensor:
-        device = torch.cuda.current_device()
+        device = current_device()
         with torch.no_grad():
             reward = self.model(
                 sequences.to(device),

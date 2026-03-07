@@ -6,6 +6,7 @@ from torch.optim import Optimizer
 from tqdm import tqdm
 
 from openrlhf.models import SFTLoss
+from openrlhf.utils.device_utils import current_device
 from openrlhf.utils.distributed_sampler import DistributedSampler
 
 
@@ -133,9 +134,9 @@ class SFTTrainer(ABC):
             # train
             self.model.train()
             for inputs, attention_masks, loss_masks in self.train_dataloader:
-                inputs = inputs.to(torch.cuda.current_device()).squeeze(1)
-                attention_mask = attention_masks.to(torch.cuda.current_device()).squeeze(1)
-                loss_mask = loss_masks.to(torch.cuda.current_device()).squeeze(1)
+                inputs = inputs.to(current_device()).squeeze(1)
+                attention_mask = attention_masks.to(current_device()).squeeze(1)
+                loss_mask = loss_masks.to(current_device()).squeeze(1)
                 per_token_log_probs, output = self.model(
                     inputs,
                     attention_mask=attention_mask,
@@ -225,9 +226,9 @@ class SFTTrainer(ABC):
             )
 
             for inputs, attention_masks, loss_masks in eval_dataloader:
-                inputs = inputs.to(torch.cuda.current_device()).squeeze(1)
-                attention_mask = attention_masks.to(torch.cuda.current_device()).squeeze(1)
-                loss_mask = loss_masks.to(torch.cuda.current_device()).squeeze(1)
+                inputs = inputs.to(current_device()).squeeze(1)
+                attention_mask = attention_masks.to(current_device()).squeeze(1)
+                loss_mask = loss_masks.to(current_device()).squeeze(1)
                 per_token_log_probs = self.model(
                     inputs,
                     attention_mask=attention_mask,

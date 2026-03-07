@@ -34,7 +34,10 @@ export TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 export LOG_DIR="${SAVE_PATH}/${MODEL_NAME}/logs"
 export CUR_LOG_DIR="${LOG_DIR}/${TIMESTAMP}"
 
-# Stop any existing ray processes
+# Stop any existing processes
+pkill -f math_verifier 2>/dev/null || true
+pkill -f openrlhf 2>/dev/null || true
+sleep 1
 ${RAY_EXEC} stop
 
 # Create necessary directories

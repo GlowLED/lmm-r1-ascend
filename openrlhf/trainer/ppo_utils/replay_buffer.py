@@ -6,6 +6,8 @@ from typing import List, Optional
 import torch
 import torch.nn.functional as F
 
+from openrlhf.utils.device_utils import current_device
+
 
 from .experience_maker import Experience
 from openrlhf.models.lmm_kits.base.data_processor import BaseDataProcessor, MMInputs
@@ -194,7 +196,7 @@ class NaiveReplayBuffer(ABC):
         self.cpu_offload = cpu_offload
         self.packing_samples = packing_samples
         if device is None:
-            device = f"cuda:{torch.cuda.current_device()}"
+            device = f"cuda:{current_device()}"
         self.target_device = torch.device(device)
         self.items: List[BufferItem] = []
         self.store_extra_buffers = store_extra_buffers

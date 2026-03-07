@@ -25,6 +25,7 @@ from openrlhf.models.lmm_kits.utils import get_data_processor
 from openrlhf.models.lmm_kits.base.data_processor import MMInputs
 from peft.peft_model import PeftModel
 from openrlhf.utils.distributed_util import init_process_group, torch_dist_barrier_and_cuda_sync
+from openrlhf.utils.device_utils import current_device, empty_cache, synchronize
 from openrlhf.utils.logging_utils import init_logger
 
 from ..ppo_utils import NaiveReplayBuffer
@@ -84,7 +85,8 @@ class ActorPPOTrainer(ABC):
         ) # Dynamic sampling is controlled by the single controller. We don't need to store extra buffers here.
 
         # Init torch group for weights sync
-        backend = getattr(self.strategy.args, "vllm_sync_backend", "nccl")
+        from openrlhf.utils.device_utils import get_default_backend
+        backend = getattr(self.strategy.args, "vllm_sync_backend", get_default_backend())
         self.use_cuda_ipc = False
         if backend == "nccl" and self.strategy.args.colocate_all_models:
             self.use_cuda_ipc = True
@@ -156,7 +158,7 @@ class ActorPPOTrainer(ABC):
             pin_memory=self.dataloader_pin_memory,
             collate_fn=self.replay_buffer.collate_fn,
         )
-        device = torch.cuda.current_device()
+        device = current_device()
 
         status_list = []
         status_mean = {}
@@ -360,7 +362,7 @@ class ActorPPOTrainer(ABC):
             for engine in self.vllm_engines:
                 cache_reset_refs.append(engine.reset_prefix_cache.remote())
 
-        torch.cuda.empty_cache()
+        empty_cache()
         model = self.actor.model.module
         use_lora = False
         if isinstance(model, PeftModel):
@@ -391,7 +393,7 @@ class ActorPPOTrainer(ABC):
 
         if cache_reset_refs:
             ray.get(cache_reset_refs)
-        torch.cuda.empty_cache()
+        empty_cache()
         torch_dist_barrier_and_cuda_sync()
 
 
@@ -519,12 +521,12 @@ class ActorModelRayActor(BasePPORole):
 
     def fit(self, kl_ctl: float = 0):
         """Train actor model with the replay buffer."""
-        torch.cuda.empty_cache()
+        empty_cache()
         self.actor.train()
         status = self.trainer.ppo_train(kl_ctl)
         self.trainer.replay_buffer.clear()
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+        empty_cache()
+        synchronize()
         return status
 
     def save_model(self):
@@ -546,7 +548,7 @@ class ActorModelRayActor(BasePPORole):
         visual_inputs: Optional[MMInputs] = None,
     ) -> torch.Tensor:
         """Generates actor values."""
-        device = torch.cuda.current_device()
+        device = current_device()
         self.actor.eval()
         with torch.no_grad():
             action_log_probs = self.actor(

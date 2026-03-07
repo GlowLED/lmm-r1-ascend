@@ -3,6 +3,8 @@ from typing import Any, Optional, Union
 
 import torch
 import torch.distributed
+
+from openrlhf.utils.device_utils import synchronize as _device_synchronize
 from torch.distributed.distributed_c10d import (
     Backend,
     PrefixStore,
@@ -15,13 +17,13 @@ from torch.distributed.distributed_c10d import (
 
 
 def torch_dist_barrier_and_cuda_sync():
-    """Synchronize distributed training and CUDA operations.
+    """Synchronize distributed training and accelerator operations.
     This function ensures that:
     1. All distributed processes reach this point (barrier)
-    2. All CUDA operations are completed (synchronize)
+    2. All accelerator operations are completed (synchronize)
     """
     torch.distributed.barrier()
-    torch.cuda.synchronize()
+    _device_synchronize()
 
 
 # Copy from pytorch to allow creating multiple main groups.

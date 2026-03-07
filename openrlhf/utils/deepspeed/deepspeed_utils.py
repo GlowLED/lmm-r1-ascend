@@ -1,5 +1,7 @@
 from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
 
+from openrlhf.utils.device_utils import empty_cache, synchronize
+
 
 def get_train_ds_config(
     offload,
@@ -159,9 +161,9 @@ def offload_deepspeed_states(model, pin_memory=True, non_blocking=True):
         non_blocking=non_blocking,
     )
     model.empty_partition_cache()
-    torch.cuda.empty_cache()
+    empty_cache()
     torch.distributed.barrier()
-    torch.cuda.synchronize()
+    synchronize()
 
 
 def reload_deepspeed_states(model, non_blocking=True):
@@ -179,6 +181,6 @@ def reload_deepspeed_states(model, non_blocking=True):
     import torch
 
     model.reload_states(non_blocking=non_blocking)
-    torch.cuda.empty_cache()
+    empty_cache()
     torch.distributed.barrier()
-    torch.cuda.synchronize()
+    synchronize()

@@ -1,6 +1,7 @@
 import torch
 import torch.distributed as dist
 from openrlhf.utils.flash_attn_compat import index_first_axis, pad_input, rearrange, unpad_input, all_gather
+from openrlhf.utils.device_utils import current_device
 
 RING_ATTN_GROUP = None
 
@@ -25,7 +26,7 @@ def reset_ring_attn_position_ids(start, end, packed_seq_lens):
         end: the end position
         packed_seq_lens: the sequence lengths of packed sequences
     """
-    position_ids = torch.zeros((1, end - start), dtype=torch.long, device=torch.cuda.current_device())
+    position_ids = torch.zeros((1, end - start), dtype=torch.long, device=current_device())
     offset = 0
     for seqlen in packed_seq_lens:
         seq_start = max(offset, start)

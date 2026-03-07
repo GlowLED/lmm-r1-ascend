@@ -6,6 +6,7 @@ from torch.optim import Optimizer
 from tqdm import tqdm
 
 from openrlhf.models import LogExpLoss, PairWiseLoss
+from openrlhf.utils.device_utils import current_device
 from openrlhf.utils.distributed_sampler import DistributedSampler
 
 
@@ -130,17 +131,17 @@ class RewardModelTrainer(ABC):
             self.model.train()
             for data in self.train_dataloader:
                 chosen_ids, c_mask, reject_ids, r_mask, margin = data
-                chosen_ids = chosen_ids.squeeze(1).to(torch.cuda.current_device())
-                c_mask = c_mask.squeeze(1).to(torch.cuda.current_device())
-                reject_ids = reject_ids.squeeze(1).to(torch.cuda.current_device())
-                r_mask = r_mask.squeeze(1).to(torch.cuda.current_device())
+                chosen_ids = chosen_ids.squeeze(1).to(current_device())
+                c_mask = c_mask.squeeze(1).to(current_device())
+                reject_ids = reject_ids.squeeze(1).to(current_device())
+                r_mask = r_mask.squeeze(1).to(current_device())
 
                 chosen_reward, reject_reward, aux_loss = self.concatenated_forward(
                     self.model, chosen_ids, c_mask, reject_ids, r_mask
                 )
 
                 if self.margin_loss:
-                    margin = torch.tensor(margin).to(torch.cuda.current_device())
+                    margin = torch.tensor(margin).to(current_device())
                 else:
                     margin = None
 
@@ -240,17 +241,17 @@ class RewardModelTrainer(ABC):
             loss_sum = 0
             for data in eval_dataloader:
                 chosen_ids, c_mask, reject_ids, r_mask, margin = data
-                chosen_ids = chosen_ids.squeeze(1).to(torch.cuda.current_device())
-                c_mask = c_mask.squeeze(1).to(torch.cuda.current_device())
-                reject_ids = reject_ids.squeeze(1).to(torch.cuda.current_device())
-                r_mask = r_mask.squeeze(1).to(torch.cuda.current_device())
+                chosen_ids = chosen_ids.squeeze(1).to(current_device())
+                c_mask = c_mask.squeeze(1).to(current_device())
+                reject_ids = reject_ids.squeeze(1).to(current_device())
+                r_mask = r_mask.squeeze(1).to(current_device())
 
                 chosen_reward, reject_reward, _ = self.concatenated_forward(
                     self.model, chosen_ids, c_mask, reject_ids, r_mask
                 )
 
                 if self.margin_loss:
-                    margin = torch.tensor(margin).to(torch.cuda.current_device())
+                    margin = torch.tensor(margin).to(current_device())
                 else:
                     margin = None
 

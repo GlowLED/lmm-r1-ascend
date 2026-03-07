@@ -39,6 +39,18 @@ class LLMRayActor:
             # RAY_EXPERIMENTAL_NOSET_*_VISIBLE_DEVICES is set.
             os.environ["CUDA_VISIBLE_DEVICES"] = str(ray.get_gpu_ids()[0])
 
+        # Ascend NPU: ensure ASCEND_RT_VISIBLE_DEVICES is set so that
+        # vLLM's spawned EngineCore subprocess can access the correct NPU.
+        # Ray manages "GPU" resources via --num-gpus but does not set
+        # ASCEND_RT_VISIBLE_DEVICES automatically for NPU devices.
+        try:
+            import torch_npu  # noqa: F401
+            gpu_ids = ray.get_gpu_ids()
+            if gpu_ids:
+                os.environ["ASCEND_RT_VISIBLE_DEVICES"] = str(int(gpu_ids[0]))
+        except ImportError:
+            pass
+
         num_gpus = kwargs.pop("num_gpus")
         if bundle_indices is not None:
             os.environ["VLLM_RAY_PER_WORKER_GPUS"] = str(num_gpus)

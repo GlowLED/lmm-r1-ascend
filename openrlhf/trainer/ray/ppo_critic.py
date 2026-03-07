@@ -17,6 +17,7 @@ from openrlhf.models.lmm_kits.utils import get_data_processor
 from openrlhf.models.lmm_kits.base.data_processor import MMInputs
 from openrlhf.utils.deepspeed import DeepspeedStrategy
 from openrlhf.utils.deepspeed.deepspeed_utils import offload_deepspeed_states, reload_deepspeed_states
+from openrlhf.utils.device_utils import current_device, empty_cache, synchronize
 
 from ..ppo_utils import NaiveReplayBuffer
 from .launcher import BasePPORole
@@ -70,7 +71,7 @@ class CriticPPOTrainer(ABC):
             pin_memory=self.dataloader_pin_memory,
             collate_fn=self.replay_buffer.collate_fn,
         )
-        device = torch.cuda.current_device()
+        device = current_device()
 
         status_list = []
         status_mean = {}
@@ -232,7 +233,7 @@ class CriticModelRayActor(BasePPORole):
         visual_inputs: Optional[MMInputs] = None,
     ) -> torch.Tensor:
         """Generates critic values."""
-        device = torch.cuda.current_device()
+        device = current_device()
         self.critic.eval()
         with torch.no_grad():
             value = self.critic(
@@ -252,12 +253,12 @@ class CriticModelRayActor(BasePPORole):
 
     def fit(self):
         """Train critic model with the replay buffer."""
-        torch.cuda.empty_cache()
+        empty_cache()
         self.critic.train()
         status = self.trainer.ppo_train()
         self.trainer.replay_buffer.clear()
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+        empty_cache()
+        synchronize()
         return status
 
     def save_model(self):

@@ -43,6 +43,14 @@ def ray_noset_visible_devices(env_vars=os.environ):
 def get_physical_gpu_id():
     import torch
 
+    try:
+        import torch_npu
+        device = torch.npu.current_device()
+        # NPU doesn't have UUID-based IPC; return device index as string
+        return str(device)
+    except ImportError:
+        pass
+
     device = torch.cuda.current_device()
     props = torch.cuda.get_device_properties(device)
     return str(props.uuid)

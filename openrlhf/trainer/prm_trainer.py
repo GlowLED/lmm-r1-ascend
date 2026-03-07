@@ -5,6 +5,7 @@ from torch.optim import Optimizer
 from tqdm import tqdm
 
 from openrlhf.models import PRMLoss
+from openrlhf.utils.device_utils import current_device
 from openrlhf.utils.distributed_sampler import DistributedSampler
 from openrlhf.utils.utils import convert_token_to_id
 
@@ -123,9 +124,9 @@ class ProcessRewardModelTrainer(ABC):
             self.model.train()
             for data in self.train_dataloader:
                 inputs, attention_masks, labels = data
-                inputs = inputs.to(torch.cuda.current_device()).squeeze(1)
-                attention_mask = attention_masks.to(torch.cuda.current_device()).squeeze(1)
-                labels = labels.to(torch.cuda.current_device()).squeeze(1)
+                inputs = inputs.to(current_device()).squeeze(1)
+                attention_mask = attention_masks.to(current_device()).squeeze(1)
+                labels = labels.to(current_device()).squeeze(1)
 
                 output = self.model(
                     inputs,
@@ -206,9 +207,9 @@ class ProcessRewardModelTrainer(ABC):
 
             for data in eval_dataloader:
                 inputs, attention_masks, labels = data
-                inputs = inputs.to(torch.cuda.current_device()).squeeze(1)
-                attention_mask = attention_masks.to(torch.cuda.current_device()).squeeze(1)
-                labels = labels.to(torch.cuda.current_device()).squeeze(1)
+                inputs = inputs.to(current_device()).squeeze(1)
+                attention_mask = attention_masks.to(current_device()).squeeze(1)
+                labels = labels.to(current_device()).squeeze(1)
 
                 output = self.model(
                     inputs,

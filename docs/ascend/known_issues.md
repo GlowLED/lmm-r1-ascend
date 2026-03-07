@@ -52,14 +52,15 @@ but was not found. Please install it or set ring_attn_size=1.
 
 ### 2.2 `torch.cuda.current_device()` 在 Ascend 上的行为
 
-**背景**：`ring_attn_utils.py` 的 `reset_ring_attn_position_ids` 中使用了 `torch.cuda.current_device()` 来决定 tensor 放置设备。
+**背景**：原代码中大量使用 `torch.cuda.current_device()` 等 CUDA API 进行设备管理。
 
-**Ascend 上的处理**：`torch_npu` 通常会注册兼容层，使 `torch.cuda.*` API 透明地指向 NPU 设备。如果未注册，可能需要修改为：
+**解决方案**：已通过 `openrlhf/utils/device_utils.py` 抽象层统一替换，自动检测 NPU/CUDA 并路由到对应 API。详见 [device_compat.md](device_compat.md)。
+
+**当前状态**：所有 `torch.cuda.*` 调用已替换为 device_utils 中的设备无关函数。如添加新代码，请使用：
+
 ```python
-device = torch.npu.current_device() if hasattr(torch, 'npu') and torch.npu.is_available() else torch.cuda.current_device()
+from openrlhf.utils.device_utils import current_device, set_device, device_count, empty_cache, synchronize, get_default_backend
 ```
-
-**当前状态**：假设 `torch_npu` 已正确安装并提供了 CUDA 兼容层。如遇问题请参考 torch_npu 文档。
 
 ### 2.3 NCCL vs HCCL 通信后端
 

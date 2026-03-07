@@ -70,4 +70,9 @@ class WorkerWrap:
         list_args[6] = device_id
         weight = func(*list_args)
         self.model_runner.model.load_weights(weights=[(name, weight)])
-        torch.cuda.synchronize()
+
+        import torch
+        if hasattr(torch, 'npu') and torch.npu.is_available():
+            torch.npu.synchronize()
+        else:
+            torch.cuda.synchronize()
