@@ -1,5 +1,5 @@
 from transformers import AutoProcessor, AutoConfig, AutoModelForCausalLM, AutoModelForImageTextToText, AutoTokenizer
-from transformers.tokenization_utils import PreTrainedTokenizerBase
+from transformers import PreTrainedTokenizerBase
 from transformers.configuration_utils import PretrainedConfig
 import importlib
 import os
