@@ -39,15 +39,20 @@ class LLMRayActor:
             # RAY_EXPERIMENTAL_NOSET_*_VISIBLE_DEVICES is set.
             os.environ["CUDA_VISIBLE_DEVICES"] = str(ray.get_gpu_ids()[0])
 
-        # Ascend NPU: ensure ASCEND_RT_VISIBLE_DEVICES is set so that
-        # vLLM's spawned EngineCore subprocess can access the correct NPU.
-        # Ray manages "GPU" resources via --num-gpus but does not set
-        # ASCEND_RT_VISIBLE_DEVICES automatically for NPU devices.
+        # Ascend NPU: configure device visibility and disable multiprocessing.
+        # 1. ASCEND_RT_VISIBLE_DEVICES: Ray does not set this for NPU devices.
+        # 2. VLLM_ENABLE_V1_MULTIPROCESSING=0: vLLM v1 spawns EngineCore as a
+        #    multiprocessing subprocess. On Ascend, the child process fails to
+        #    initialise the NPU runtime (aclInit error 107001) because the device
+        #    context / LD_LIBRARY_PATH do not propagate reliably. Disabling
+        #    multiprocessing makes vLLM run the engine in-process, which is fine
+        #    for training workloads.
         try:
             import torch_npu  # noqa: F401
             gpu_ids = ray.get_gpu_ids()
             if gpu_ids:
                 os.environ["ASCEND_RT_VISIBLE_DEVICES"] = str(int(gpu_ids[0]))
+            os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] = "0"
         except ImportError:
             pass
 

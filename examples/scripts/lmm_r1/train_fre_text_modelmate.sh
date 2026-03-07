@@ -9,6 +9,11 @@ unset LD_PRELOAD
 if [ -f /usr/local/Ascend/ascend-toolkit/set_env.sh ]; then
     source /usr/local/Ascend/ascend-toolkit/set_env.sh
 fi
+# NNAL (Neural Network Acceleration Library) provides libatb.so
+NNAL_LIB="/usr/local/Ascend/nnal/latest/lib64"
+if [ -d "$NNAL_LIB" ] && [[ ":$LD_LIBRARY_PATH:" != *":$NNAL_LIB:"* ]]; then
+    export LD_LIBRARY_PATH="$NNAL_LIB:${LD_LIBRARY_PATH}"
+fi
 
 PYTHON_EXEC="/usr/local/bin/python3.11"
 RAY_EXEC="/usr/local/bin/ray"

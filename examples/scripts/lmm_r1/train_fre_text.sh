@@ -5,6 +5,19 @@
 # Please modify these variables according to your environment
 # =========================================================
 
+# =================== Ascend CANN Environment ===================
+# Source CANN toolkit env (required for ACL/ATB libraries)
+if [ -f /usr/local/Ascend/ascend-toolkit/set_env.sh ]; then
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh
+fi
+# NNAL (Neural Network Acceleration Library) provides libatb.so
+# Append its path if it exists and is not already in LD_LIBRARY_PATH
+NNAL_LIB="/usr/local/Ascend/nnal/latest/lib64"
+if [ -d "$NNAL_LIB" ] && [[ ":$LD_LIBRARY_PATH:" != *":$NNAL_LIB:"* ]]; then
+    export LD_LIBRARY_PATH="$NNAL_LIB:${LD_LIBRARY_PATH}"
+fi
+# ===============================================================
+
 # Base paths - MODIFY THESE
 export WORKSPACE_DIR="$(pwd)"                      # Path to project root directory
 export DATASET_PATH="${WORKSPACE_DIR}/data/deepscaler/deepscaler_message.jsonl"  # Path to your dataset
