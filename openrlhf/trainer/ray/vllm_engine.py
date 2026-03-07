@@ -53,6 +53,24 @@ class LLMRayActor:
             if gpu_ids:
                 os.environ["ASCEND_RT_VISIBLE_DEVICES"] = str(int(gpu_ids[0]))
             os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] = "0"
+
+            # If NNAL/ATB libraries are not installed, the vllm_ascend worker's
+            # __init__ calls _register_atb_extensions() which raises OSError.
+            # Pre-emptively stub it out so vLLM can fall back to non-ATB kernels.
+            try:
+                from torch_npu.op_plugin.atb import _atb_ops as _atb_mod
+                # Test if ATB actually loads (the module-level code may have
+                # already set GLOBAL_E to a deferred exception).
+                _atb_mod._register_atb_extensions()
+            except (OSError, ImportError, Exception):
+                # Patch the function to be a no-op so vllm_ascend doesn't crash.
+                try:
+                    from torch_npu.op_plugin.atb import _atb_ops as _atb_mod
+                    _atb_mod._register_atb_extensions = lambda: None
+                except Exception:
+                    pass
+                logger.warning("NNAL/ATB not found — stubbed _register_atb_extensions. "
+                               "ATB-accelerated ops will use fallback kernels.")
         except ImportError:
             pass
 
