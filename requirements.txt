@@ -28,3 +28,7 @@ loguru
 torch_npu==2.9.0
 torchvision 
 deepspeed
+aiohttp_cors
+opentelemetry-api
+opentelemetry-sdk
+opencensus
