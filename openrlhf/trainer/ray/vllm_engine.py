@@ -103,13 +103,20 @@ class LLMRayActor:
         except Exception:
             pass
 
-        # Pillow compatibility: some versions expose EXIF tags via PIL.ExifTags
-        # but not Image.ExifTags, while vLLM currently accesses Image.ExifTags.
+        # Pillow compatibility: older versions lack Image.ExifTags and ExifTags.Base
+        # (ExifTags.Base was added in Pillow 8.2). vLLM accesses Image.ExifTags.Base.ImageID.
         try:
             from PIL import ExifTags, Image
 
             if not hasattr(Image, "ExifTags"):
                 Image.ExifTags = ExifTags
+            if not hasattr(ExifTags, "Base"):
+                import enum
+
+                class _ExifBase(enum.IntEnum):
+                    ImageID = 0xA420
+
+                ExifTags.Base = _ExifBase
         except Exception:
             pass
 
