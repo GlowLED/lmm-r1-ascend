@@ -122,6 +122,20 @@ class LLMRayActor:
 
         import vllm
 
+        # If ATB flash attention ops are not available (NNAL not installed),
+        # fall back to vllm's native PyTorch implementation for multimodal
+        # encoder attention so that vision models like Qwen2.5-VL can still run.
+        try:
+            _ = torch.ops.atb._npu_flash_attention_unpad
+        except (AttributeError, RuntimeError):
+            try:
+                from vllm_ascend.ops.mm_encoder_attention import MMEncoderAttention
+
+                if hasattr(MMEncoderAttention, "forward_native"):
+                    MMEncoderAttention.forward_oot = MMEncoderAttention.forward_native
+            except Exception:
+                pass
+
         full_determinism = kwargs.pop("full_determinism", False)
         if full_determinism or vllm.__version__ == "0.8.2":
             # https://github.com/vllm-project/vllm/blob/effc5d24fae10b29996256eb7a88668ff7941aed/examples/offline_inference/reproduciblity.py#L11
