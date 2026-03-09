@@ -85,6 +85,8 @@ echo "Starting training..."
 export RAY_ADDRESS="0.0.0.0:6379"
 export VLLM_USE_V1=1
 export VLLM_ENABLE_V1_MULTIPROCESSING=0
+# Skip ATB registration if NNAL is not installed (torch_npu checks this)
+export DISABLE_ATB_EXTENSION=1
 
 ${PYTHON_EXEC} -m openrlhf.cli.train_ppo_ray \
    --ref_num_nodes 1 \
