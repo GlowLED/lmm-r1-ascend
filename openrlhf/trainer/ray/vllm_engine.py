@@ -3,6 +3,8 @@ import queue
 from collections import defaultdict
 from typing import Any, List
 
+import torch
+
 import ray
 from ray.util.placement_group import placement_group
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
