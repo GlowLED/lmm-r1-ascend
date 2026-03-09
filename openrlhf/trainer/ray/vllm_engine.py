@@ -103,6 +103,16 @@ class LLMRayActor:
         except Exception:
             pass
 
+        # Pillow compatibility: some versions expose EXIF tags via PIL.ExifTags
+        # but not Image.ExifTags, while vLLM currently accesses Image.ExifTags.
+        try:
+            from PIL import ExifTags, Image
+
+            if not hasattr(Image, "ExifTags"):
+                Image.ExifTags = ExifTags
+        except Exception:
+            pass
+
         import vllm
 
         full_determinism = kwargs.pop("full_determinism", False)
