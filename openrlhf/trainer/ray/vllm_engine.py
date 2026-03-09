@@ -124,16 +124,37 @@ class LLMRayActor:
         import vllm
 
         # If ATB flash attention ops are not available (NNAL not installed),
-        # fall back to vllm's native PyTorch implementation for multimodal
-        # encoder attention so that vision models like Qwen2.5-VL can still run.
+        # monkey-patch torch_npu._npu_flash_attention_unpad with a PyTorch SDPA
+        # fallback so that vision encoders (e.g. Qwen2.5-VL) can still run.
         try:
             _ = torch.ops.atb._npu_flash_attention_unpad
         except (AttributeError, RuntimeError):
             try:
-                from vllm_ascend.ops.mm_encoder_attention import MMEncoderAttention
+                import torch_npu as _tnpu
 
-                if hasattr(MMEncoderAttention, "forward_native"):
-                    MMEncoderAttention.forward_oot = MMEncoderAttention.forward_native
+                def _fa_unpad_fallback(query, key, value, *args, **kwargs):
+                    """Pure-PyTorch fallback for ATB _npu_flash_attention_unpad.
+
+                    Treats all packed tokens as a single sequence and uses
+                    scaled_dot_product_attention.  Not optimised but sufficient
+                    for profile_run / light inference without NNAL.
+                    """
+                    scale = kwargs.get("scale_value", query.shape[-1] ** -0.5)
+                    # query/key/value: [total_tokens, num_heads, head_dim]  (TND)
+                    q = query.unsqueeze(0).transpose(1, 2)   # [1, H, T, D]
+                    k = key.unsqueeze(0).transpose(1, 2)
+                    v = value.unsqueeze(0).transpose(1, 2)
+                    out = torch.nn.functional.scaled_dot_product_attention(
+                        q, k, v, scale=scale
+                    )
+                    out = out.transpose(1, 2).squeeze(0)     # [T, H, D]
+                    return out
+
+                _tnpu._npu_flash_attention_unpad = _fa_unpad_fallback
+                logger.warning(
+                    "ATB _npu_flash_attention_unpad not available, "
+                    "using PyTorch SDPA fallback for MM encoder attention."
+                )
             except Exception:
                 pass
 
