@@ -126,15 +126,11 @@ class LLMRayActor:
         import vllm
 
         # ---- Comprehensive ATB fallback when NNAL is not installed ----
-        # vllm_ascend uses multiple ATB-accelerated ops (flash attention,
-        # matmul_add, etc.) via torch.ops.atb.*.  When NNAL/ATB is missing
-        # these ops are not registered and every call raises AttributeError.
-        #
-        # Strategy:
-        #   1. Detect ATB availability once.
-        #   2. Patch torch_npu ATB entry-points with pure-PyTorch fallbacks.
-        #   3. Patch vllm_ascend's NPUWorker._warm_up_atb to no-op (warmup
-        #      only exercises ATB matmul – not needed for correctness).
+        # vllm_ascend uses ATB-accelerated ops via torch.ops.atb.*.
+        # When NNAL is missing these ops are not registered.  Instead of
+        # patching individual torch_npu functions one-by-one (whack-a-mole),
+        # we monkey-patch the ATB dispatch wrapper so that *every* missing
+        # ATB op is intercepted and routed to a pure-PyTorch fallback table.
         _atb_available = True
         try:
             _ = torch.ops.atb._npu_flash_attention_unpad
@@ -149,8 +145,10 @@ class LLMRayActor:
             try:
                 import torch_npu as _tnpu
 
-                # (a) flash attention fallback (used by MM encoder attention)
+                # ---------- fallback implementations ----------
+
                 def _fa_unpad_fallback(query, key, value, *args, **kwargs):
+                    """Flash-attention unpad → scaled_dot_product_attention."""
                     scale = kwargs.get("scale_value", query.shape[-1] ** -0.5)
                     q = query.unsqueeze(0).transpose(1, 2)
                     k = key.unsqueeze(0).transpose(1, 2)
@@ -160,18 +158,60 @@ class LLMRayActor:
                     )
                     return out.transpose(1, 2).squeeze(0)
 
-                _tnpu._npu_flash_attention_unpad = _fa_unpad_fallback
-
-                # (b) matmul_add fallback (used by ATB warmup & possibly inference)
                 def _matmul_add_fp32_fallback(x, weight, bias):
                     return torch.addmm(bias, x, weight.t()) if bias is not None else torch.mm(x, weight.t())
 
-                _tnpu._npu_matmul_add_fp32 = _matmul_add_fp32_fallback
+                def _reshape_and_cache_fallback(key, value, key_cache, value_cache,
+                                                slot_mapping, *args, **kwargs):
+                    """Write key/value into KV-cache at the slots indicated by slot_mapping."""
+                    slot_mapping = slot_mapping.long()
+                    flat_key = key_cache.view(-1, *key_cache.shape[2:])
+                    flat_val = value_cache.view(-1, *value_cache.shape[2:])
+                    flat_key[slot_mapping] = key.to(flat_key.dtype)
+                    flat_val[slot_mapping] = value.to(flat_val.dtype)
+
+                # Map: torch_npu function name → fallback callable
+                _ATB_FALLBACK_TABLE = {
+                    "_npu_flash_attention_unpad": _fa_unpad_fallback,
+                    "_npu_matmul_add_fp32": _matmul_add_fp32_fallback,
+                    "_npu_reshape_and_cache": _reshape_and_cache_fallback,
+                }
+
+                # Register known fallbacks on torch_npu module
+                for _fname, _ffunc in _ATB_FALLBACK_TABLE.items():
+                    if not hasattr(_tnpu, _fname) or _fname in ("_npu_flash_attention_unpad",
+                                                                 "_npu_matmul_add_fp32",
+                                                                 "_npu_reshape_and_cache"):
+                        setattr(_tnpu, _fname, _ffunc)
+
+                # ---------- generic ATB wrapper interception ----------
+                # Monkey-patch the ATB wrapper decorator so that any *future*
+                # ATB op that is not in our table still gets a meaningful error
+                # instead of a cryptic _OpNamespace AttributeError.
+                try:
+                    import torch_npu.op_plugin.atb._atb_ops as _atb_mod
+
+                    _orig_getattr = torch.ops.atb.__class__.__getattr__
+
+                    def _safe_atb_getattr(self, name):
+                        try:
+                            return _orig_getattr(self, name)
+                        except AttributeError:
+                            # If we have a fallback, use it
+                            if name in _ATB_FALLBACK_TABLE:
+                                return _ATB_FALLBACK_TABLE[name]
+                            logger.warning(f"ATB op '{name}' not found and no fallback registered.")
+                            raise
+
+                    torch.ops.atb.__class__.__getattr__ = _safe_atb_getattr
+                except Exception:
+                    pass
+
             except Exception:
                 pass
 
-            # (c) Patch NPUWorker._warm_up_atb to no-op so that warmup
-            #     does not attempt ATB matmul operations.
+            # Patch NPUWorker._warm_up_atb to no-op so that warmup
+            # does not attempt ATB matmul operations.
             try:
                 from vllm_ascend.worker.worker import NPUWorker
                 NPUWorker._warm_up_atb = lambda self: None
