@@ -27,7 +27,7 @@ wheel
 loguru
 torch_npu
 torchvision 
-deepspeed==0.16.7
+deepspeed
 aiohttp_cors
 opentelemetry-api
 opentelemetry-sdk
