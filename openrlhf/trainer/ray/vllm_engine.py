@@ -184,6 +184,17 @@ class LLMRayActor:
                                                                  "_npu_reshape_and_cache"):
                         setattr(_tnpu, _fname, _ffunc)
 
+                # Also patch torch_npu.op_plugin.atb._atb_ops to bypass the ATB
+                # wrapper that intercepts torch_npu._npu_* calls and redirects
+                # them to torch.ops.atb.* (which are unregistered without NNAL).
+                try:
+                    import torch_npu.op_plugin.atb._atb_ops as _atb_mod
+                    for _fname, _ffunc in _ATB_FALLBACK_TABLE.items():
+                        if hasattr(_atb_mod, _fname):
+                            setattr(_atb_mod, _fname, _ffunc)
+                except Exception:
+                    pass
+
                 # ---------- generic ATB wrapper interception ----------
                 # Monkey-patch the ATB wrapper decorator so that any *future*
                 # ATB op that is not in our table still gets a meaningful error
@@ -200,8 +211,15 @@ class LLMRayActor:
                             # If we have a fallback, use it
                             if name in _ATB_FALLBACK_TABLE:
                                 return _ATB_FALLBACK_TABLE[name]
-                            logger.warning(f"ATB op '{name}' not found and no fallback registered.")
-                            raise
+                            # Return a lazy stub that only raises when actually *called*.
+                            # Many ATB ops are looked up at import time but never invoked
+                            # (e.g. ROCm / CUDA-only quantisation kernels).  Raising here
+                            # would block startup, so we defer the error.
+                            def _deferred_raise(*a, **kw):
+                                raise AttributeError(
+                                    f"ATB op '{name}' not found and no fallback registered."
+                                )
+                            return _deferred_raise
 
                     torch.ops.atb.__class__.__getattr__ = _safe_atb_getattr
                 except Exception:
