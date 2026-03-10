@@ -1,6 +1,7 @@
+import json as _json
 import os
 
-from datasets import interleave_datasets, load_dataset, load_from_disk
+from datasets import Dataset, DatasetDict, interleave_datasets, load_dataset, load_from_disk
 from transformers import AutoTokenizer
 
 def get_tokenizer(pretrain, model, padding_side="left", strategy=None, use_fast=True):
@@ -77,9 +78,19 @@ def blending_datasets(
         elif ext in [".json", ".jsonl", ".csv", ".parquet", ".arrow"]:
             ext = ext.lower().strip(".")
             if ext == "jsonl":
-                ext = "json"
-            data = load_dataset(ext, data_files=dataset)
-            strategy.print(f"loaded {dataset} with data_files={dataset}")
+                # Load jsonl directly with Python json to avoid
+                # datasets/pandas ujson_loads compatibility issues.
+                records = []
+                with open(dataset, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            records.append(_json.loads(line))
+                data = DatasetDict({"train": Dataset.from_list(records)})
+                strategy.print(f"loaded {dataset} with native json ({len(records)} rows)")
+            else:
+                data = load_dataset(ext, data_files=dataset)
+                strategy.print(f"loaded {dataset} with data_files={dataset}")
         # local dataset saved with `datasets.Dataset.save_to_disk`
         elif os.path.isdir(dataset):
             try:
