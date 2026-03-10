@@ -98,7 +98,9 @@ ${PYTHON_EXEC} -m openrlhf.cli.train_ppo_ray \
    --critic_num_gpus_per_node 1 \
    --vllm_num_engines 1 \
    --vllm_tensor_parallel_size 1 \
+    --colocate_all_models \
    --vllm_enable_sleep \
+    --deepspeed_enable_sleep \
    --vllm_gpu_memory_utilization 0.5 \
    --vllm_sync_backend gloo \
    --enable_prefix_caching \
