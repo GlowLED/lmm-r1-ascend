@@ -25,7 +25,7 @@ transformers_stream_generator
 wandb
 wheel
 loguru
-torch_npu==2.9.0
+torch_npu
 torchvision 
 deepspeed==0.16.7
 aiohttp_cors
