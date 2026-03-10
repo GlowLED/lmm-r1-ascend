@@ -25,6 +25,7 @@ transformers_stream_generator
 wandb
 wheel
 loguru
+torch
 torch_npu
 torchvision 
 deepspeed
