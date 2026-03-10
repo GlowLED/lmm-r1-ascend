@@ -5,7 +5,12 @@ class Qwen2_5_VLPatch(BasePatch):
     def _add_get_inputs_embeds():
         from transformers import Qwen2_5_VLForConditionalGeneration
         def get_inputs_embeds(self, input_ids, image_grid_thw=None, video_grid_thw=None, pixel_values=None, pixel_values_videos=None, **kwargs):
-            inputs_embeds = self.model.embed_tokens(input_ids)
+            # Qwen2_5_VLModel may place embed_tokens under .language_model or directly
+            if hasattr(self.model, 'embed_tokens'):
+                embed_tokens = self.model.embed_tokens
+            else:
+                embed_tokens = self.model.language_model.embed_tokens
+            inputs_embeds = embed_tokens(input_ids)
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.dtype)
                 image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
