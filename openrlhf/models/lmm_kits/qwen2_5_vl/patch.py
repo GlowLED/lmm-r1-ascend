@@ -59,10 +59,23 @@ class Qwen2_5_VLPatch(BasePatch):
     def _add_get_position_ids():
         from transformers import Qwen2_5_VLForConditionalGeneration
         def get_position_ids(self, input_ids, image_grid_thw=None, video_grid_thw=None, attention_mask=None, packing=False, **kwargs):
-            position_ids,mrope_position_deltas = self.get_rope_index(input_ids=input_ids, image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw, attention_mask=attention_mask)
+            # get_rope_index may live on self, self.model, or not exist at all
+            rope_fn = getattr(self, 'get_rope_index', None) or getattr(self.model, 'get_rope_index', None)
+            if rope_fn is not None:
+                position_ids, mrope_position_deltas = rope_fn(
+                    input_ids=input_ids,
+                    image_grid_thw=image_grid_thw,
+                    video_grid_thw=video_grid_thw,
+                    attention_mask=attention_mask,
+                )
+            else:
+                # Fallback: build simple incremental position_ids and broadcast to 3 dims for mrope
+                import torch
+                seq_len = input_ids.shape[-1]
+                pos = torch.arange(seq_len, device=input_ids.device).unsqueeze(0).expand(input_ids.shape[0], -1)
+                position_ids = pos.unsqueeze(0).expand(3, -1, -1)  # [3, bs, seq_len]
+                mrope_position_deltas = None
             if packing:
-                # For packing, the position_ids will be unpaded and sliced later, which needs the shape: [bs,seq_len,...]
-                # However, the position_ids of Qwen2.5VL is [3,bs,seq_len], so we need to permute it.
                 position_ids = position_ids.permute(1,2,0) # [3,bs,seq_len] -> [bs,seq_len,3]
             return position_ids
         Qwen2_5_VLForConditionalGeneration.get_position_ids = get_position_ids
