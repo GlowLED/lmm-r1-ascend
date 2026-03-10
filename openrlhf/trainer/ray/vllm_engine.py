@@ -208,6 +208,12 @@ class LLMRayActor:
                         try:
                             return _orig_getattr(self, name)
                         except AttributeError:
+                            # IMPORTANT: _OpNamespace is shared by ALL op namespaces
+                            # (torch.ops._C, torch.ops.vllm, torch.ops.atb, ...).
+                            # Only intercept the 'atb' namespace; re-raise for
+                            # everything else to avoid breaking vLLM's _C op registration.
+                            if getattr(self, 'name', None) != 'atb':
+                                raise
                             # If we have a fallback, use it
                             if name in _ATB_FALLBACK_TABLE:
                                 return _ATB_FALLBACK_TABLE[name]
