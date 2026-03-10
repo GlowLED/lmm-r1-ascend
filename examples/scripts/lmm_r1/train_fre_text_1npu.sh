@@ -118,7 +118,7 @@ ${PYTHON_EXEC} -m openrlhf.cli.train_ppo_ray \
    --max_samples 100 \
    --generate_max_len 2048 \
    --advantage_estimator reinforce_baseline \
-   --zero_stage 2 \
+   --zero_stage 3 \
    --bf16 \
    --actor_learning_rate 4e-7 \
    --init_kl_coef 0.001 \
