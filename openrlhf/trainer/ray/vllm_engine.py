@@ -53,6 +53,8 @@ class LLMRayActor:
             if gpu_ids:
                 os.environ["ASCEND_RT_VISIBLE_DEVICES"] = str(int(gpu_ids[0]))
             os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] = "0"
+            # Disable FRACTAL_NZ mode which causes precision issues in RL sleep/wake_up
+            os.environ.setdefault("VLLM_ASCEND_ENABLE_NZ", "0")
 
             # If NNAL/ATB libraries are not installed, the vllm_ascend worker's
             # __init__ calls _register_atb_extensions() which raises OSError.
