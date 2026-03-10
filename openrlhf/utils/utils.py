@@ -85,7 +85,13 @@ def blending_datasets(
                     for line in f:
                         line = line.strip()
                         if line:
-                            records.append(_json.loads(line))
+                            obj = _json.loads(line)
+                            # If each line is a bare list (e.g. chat messages),
+                            # wrap it in a dict keyed by "message" so that
+                            # Dataset.from_list gets a list of dicts.
+                            if isinstance(obj, list):
+                                obj = {"message": obj}
+                            records.append(obj)
                 data = DatasetDict({"train": Dataset.from_list(records)})
                 strategy.print(f"loaded {dataset} with native json ({len(records)} rows)")
             else:
