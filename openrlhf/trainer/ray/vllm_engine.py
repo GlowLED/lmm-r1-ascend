@@ -162,13 +162,18 @@ class LLMRayActor:
                     return torch.addmm(bias, x, weight.t()) if bias is not None else torch.mm(x, weight.t())
 
                 def _reshape_and_cache_fallback(key, value, key_cache, value_cache,
-                                                slot_mapping, *args, **kwargs):
-                    """Write key/value into KV-cache at the slots indicated by slot_mapping."""
-                    slot_mapping = slot_mapping.long()
+                                                slot_indices=None, slot_mapping=None,
+                                                **kwargs):
+                    """Write key/value into KV-cache at the given slots.
+                    Handles both slot_indices= (vllm_ascend) and slot_mapping= calling conventions."""
+                    slots = slot_indices if slot_indices is not None else slot_mapping
+                    if slots is None:
+                        raise TypeError("_npu_reshape_and_cache: neither slot_indices nor slot_mapping provided")
+                    slots = slots.long()
                     flat_key = key_cache.view(-1, *key_cache.shape[2:])
                     flat_val = value_cache.view(-1, *value_cache.shape[2:])
-                    flat_key[slot_mapping] = key.to(flat_key.dtype)
-                    flat_val[slot_mapping] = value.to(flat_val.dtype)
+                    flat_key[slots] = key.to(flat_key.dtype)
+                    flat_val[slots] = value.to(flat_val.dtype)
 
                 # Map: torch_npu function name → fallback callable
                 _ATB_FALLBACK_TABLE = {
