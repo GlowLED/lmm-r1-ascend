@@ -121,6 +121,7 @@ ${PYTHON_EXEC} -m openrlhf.cli.train_ppo_ray \
    --advantage_estimator reinforce_baseline \
    --zero_stage 3 \
    --bf16 \
+   --adam_offload \
    --actor_learning_rate 4e-7 \
    --init_kl_coef 0.001 \
    --prompt_data ${DATASET_PATH} \
