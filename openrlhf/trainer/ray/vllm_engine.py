@@ -123,38 +123,57 @@ class LLMRayActor:
         import torch
         import vllm
 
-        # If ATB flash attention ops are not available (NNAL not installed),
-        # monkey-patch torch_npu._npu_flash_attention_unpad with a PyTorch SDPA
-        # fallback so that vision encoders (e.g. Qwen2.5-VL) can still run.
+        # ---- Comprehensive ATB fallback when NNAL is not installed ----
+        # vllm_ascend uses multiple ATB-accelerated ops (flash attention,
+        # matmul_add, etc.) via torch.ops.atb.*.  When NNAL/ATB is missing
+        # these ops are not registered and every call raises AttributeError.
+        #
+        # Strategy:
+        #   1. Detect ATB availability once.
+        #   2. Patch torch_npu ATB entry-points with pure-PyTorch fallbacks.
+        #   3. Patch vllm_ascend's NPUWorker._warm_up_atb to no-op (warmup
+        #      only exercises ATB matmul – not needed for correctness).
+        _atb_available = True
         try:
             _ = torch.ops.atb._npu_flash_attention_unpad
         except (AttributeError, RuntimeError):
+            _atb_available = False
+
+        if not _atb_available:
+            logger.warning(
+                "ATB ops not available (NNAL not installed). "
+                "Applying PyTorch fallbacks for vllm_ascend ATB operations."
+            )
             try:
                 import torch_npu as _tnpu
 
+                # (a) flash attention fallback (used by MM encoder attention)
                 def _fa_unpad_fallback(query, key, value, *args, **kwargs):
-                    """Pure-PyTorch fallback for ATB _npu_flash_attention_unpad.
-
-                    Treats all packed tokens as a single sequence and uses
-                    scaled_dot_product_attention.  Not optimised but sufficient
-                    for profile_run / light inference without NNAL.
-                    """
                     scale = kwargs.get("scale_value", query.shape[-1] ** -0.5)
-                    # query/key/value: [total_tokens, num_heads, head_dim]  (TND)
-                    q = query.unsqueeze(0).transpose(1, 2)   # [1, H, T, D]
+                    q = query.unsqueeze(0).transpose(1, 2)
                     k = key.unsqueeze(0).transpose(1, 2)
                     v = value.unsqueeze(0).transpose(1, 2)
                     out = torch.nn.functional.scaled_dot_product_attention(
                         q, k, v, scale=scale
                     )
-                    out = out.transpose(1, 2).squeeze(0)     # [T, H, D]
-                    return out
+                    return out.transpose(1, 2).squeeze(0)
 
                 _tnpu._npu_flash_attention_unpad = _fa_unpad_fallback
-                logger.warning(
-                    "ATB _npu_flash_attention_unpad not available, "
-                    "using PyTorch SDPA fallback for MM encoder attention."
-                )
+
+                # (b) matmul_add fallback (used by ATB warmup & possibly inference)
+                def _matmul_add_fp32_fallback(x, weight, bias):
+                    return torch.addmm(bias, x, weight.t()) if bias is not None else torch.mm(x, weight.t())
+
+                _tnpu._npu_matmul_add_fp32 = _matmul_add_fp32_fallback
+            except Exception:
+                pass
+
+            # (c) Patch NPUWorker._warm_up_atb to no-op so that warmup
+            #     does not attempt ATB matmul operations.
+            try:
+                from vllm_ascend.worker.worker import NPUWorker
+                NPUWorker._warm_up_atb = lambda self: None
+                logger.info("Patched NPUWorker._warm_up_atb to no-op.")
             except Exception:
                 pass
 
