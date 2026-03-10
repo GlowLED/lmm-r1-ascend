@@ -1,3 +1,5 @@
+import json
+
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
@@ -12,6 +14,11 @@ def preprocess_data(data, input_template=None, input_key="input", label_key=None
         prompt = data[input_key]
         if input_template:
             prompt = input_template.format(prompt)
+        elif not isinstance(prompt, str):
+            # Serialize chat messages (list of dicts) to JSON string so that
+            # PyTorch DataLoader can batch them cleanly.  _format_messages()
+            # in data_processor will json.loads() them back.
+            prompt = json.dumps(prompt, ensure_ascii=False)
 
     # for Reinforced Fine-tuning
     label = "" if label_key is None else data[label_key]
