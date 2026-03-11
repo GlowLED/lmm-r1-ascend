@@ -297,6 +297,8 @@ class ActorPPOTrainer(ABC):
 
     def _broadcast_module(self,module,prefix=None,empty_cache=False,need_gather=False):
         count, num_params = 0, len(list(module.named_parameters()))
+        backend = getattr(self.strategy.args, "vllm_sync_backend", "nccl")
+        use_cpu_broadcast = (backend == "gloo")
         for name, param in module.named_parameters(prefix=prefix):
             # broadcast
             count += 1
@@ -320,7 +322,12 @@ class ActorPPOTrainer(ABC):
 
                             collective.broadcast(param.data, 0, group_name=self._model_update_group)
                         else:
-                            torch.distributed.broadcast(param.data, 0, group=self._model_update_group)
+                            if use_cpu_broadcast:
+                                # gloo only supports CPU tensors
+                                cpu_data = param.data.to("cpu")
+                                torch.distributed.broadcast(cpu_data, 0, group=self._model_update_group)
+                            else:
+                                torch.distributed.broadcast(param.data, 0, group=self._model_update_group)
                         ray.get(refs)
             # CUDA IPC
             else:

@@ -24,6 +24,7 @@ class WorkerWrap:
                 group_name=group_name,
             )
         self._model_update_with_ray = use_ray
+        self._model_update_backend = backend
         print(
             f"init_process_group: master_address={master_address}, master_port={master_port}, ",
             f"rank={rank}, world_size={world_size}, group_name={group_name}",
@@ -31,19 +32,28 @@ class WorkerWrap:
 
     def update_weight(self, name, dtype, shape, empty_cache=False):
         import torch
+        from openrlhf.utils.device_utils import get_current_device_string
 
         """Broadcast weight to all vllm workers from source rank 0 (actor model)"""
         if torch.distributed.get_rank() == 0:
             print(f"update weight: {name}, dtype: {dtype}, shape: {shape}")
 
         assert dtype == self.model_config.dtype, f"mismatch dtype: src {dtype}, dst {self.model_config.dtype}"
-        weight = torch.empty(shape, dtype=dtype, device="cuda")
+
+        # gloo backend only supports CPU tensors; broadcast on CPU then move to device
+        use_cpu = getattr(self, '_model_update_backend', 'nccl') == 'gloo'
+        alloc_device = "cpu" if use_cpu else get_current_device_string()
+        weight = torch.empty(shape, dtype=dtype, device=alloc_device)
+
         if self._model_update_with_ray:
             import ray.util.collective as collective
 
             collective.broadcast(weight, 0, group_name=self._model_update_group)
         else:
             torch.distributed.broadcast(weight, 0, group=self._model_update_group)
+
+        if use_cpu:
+            weight = weight.to(get_current_device_string())
 
         self.model_runner.model.load_weights(weights=[(name, weight)])
 

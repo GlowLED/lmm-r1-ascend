@@ -61,3 +61,10 @@ def get_default_backend() -> str:
     if _npu_available():
         return "hccl"
     return "nccl"
+
+
+def get_current_device_string() -> str:
+    """Return e.g. 'npu:0' or 'cuda:0' for the current accelerator."""
+    if _npu_available():
+        return f"npu:{torch.npu.current_device()}"
+    return f"cuda:{torch.cuda.current_device()}"
