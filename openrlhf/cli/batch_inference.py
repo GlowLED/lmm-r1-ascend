@@ -17,6 +17,20 @@ from openrlhf.utils.device_utils import current_device, device_count
 def batch_generate_vllm(args):
     from vllm import LLM, SamplingParams
 
+    # --- Ascend NPU: stub ATB extensions if NNAL is not installed ---
+    try:
+        from torch_npu.op_plugin.atb._atb_ops import _register_atb_extensions
+        _register_atb_extensions()
+    except Exception:
+        import torch_npu
+        if hasattr(torch_npu, "op_plugin") and hasattr(torch_npu.op_plugin, "atb"):
+            torch_npu.op_plugin.atb._atb_ops._register_atb_extensions = lambda: None
+        try:
+            from vllm_ascend.worker.worker import NPUWorker
+            NPUWorker._warm_up_atb = lambda self: None
+        except Exception:
+            pass
+
     # configure strategy
     class Empty:
         pass
