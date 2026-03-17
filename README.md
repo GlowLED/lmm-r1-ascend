@@ -6,19 +6,19 @@
 
 <div align="center">
 <p align="center">
-      <a href="https://github.com/TideDra/lmm-r1/graphs/contributors">
-        <img alt="GitHub Contributors" src="https://img.shields.io/github/contributors/TideDra/lmm-r1" />
+      <a href="https://github.com/GlowLED/lmm-r1-ascend/graphs/contributors">
+        <img alt="GitHub Contributors" src="https://img.shields.io/github/contributors/GlowLED/lmm-r1-ascend" />
       </a>
-      <a href="https://github.com/TideDra/lmm-r1/issues">
-        <img alt="Issues" src="https://img.shields.io/github/issues/TideDra/lmm-r1?color=0088ff" />
+      <a href="https://github.com/GlowLED/lmm-r1-ascend/issues">
+        <img alt="Issues" src="https://img.shields.io/github/issues/GlowLED/lmm-r1-ascend?color=0088ff" />
       </a>
-      <a href="https://github.com/TideDra/lmm-r1/discussions">
-        <img alt="Issues" src="https://img.shields.io/github/discussions/TideDra/lmm-r1?color=0088ff" />
+      <a href="https://github.com/GlowLED/lmm-r1-ascend/discussions">
+        <img alt="Issues" src="https://img.shields.io/github/discussions/GlowLED/lmm-r1-ascend?color=0088ff" />
       </a>
-      <a href="https://github.com/TideDra/lmm-r1/pulls">
-        <img alt="GitHub pull requests" src="https://img.shields.io/github/issues-pr/TideDra/lmm-r1?color=0088ff" />
-      <a href="https://github.com/TideDra/lmm-r1/stargazers">
-        <img alt="GitHub stars" src="https://img.shields.io/github/stars/TideDra/lmm-r1?color=ccf" />
+      <a href="https://github.com/GlowLED/lmm-r1-ascend/pulls">
+        <img alt="GitHub pull requests" src="https://img.shields.io/github/issues-pr/GlowLED/lmm-r1-ascend?color=0088ff" />
+      <a href="https://github.com/GlowLED/lmm-r1-ascend/stargazers">
+        <img alt="GitHub stars" src="https://img.shields.io/github/stars/GlowLED/lmm-r1-ascend?color=ccf" />
       </a>
       <br>
       <em>Open-source / Comprehensive / Lightweight / Easy-to-use</em>
@@ -34,6 +34,7 @@
 [Switch to the Chinese version (切换至中文版)](/README_zh.md)
 
 ## News
+- [2026/3/17] 🔧 **Ascend NPU support**: LMM-R1 now runs on Huawei Ascend NPUs. Full PPO/REINFORCE++ training pipeline verified on single-NPU (Qwen2.5-VL-3B). See [Ascend NPU Support](#ascend-npu-support).
 - [2025/3/11] 🚀 Our codebase is merged into [OpenRLHF-M](https://github.com/OpenRLHF/OpenRLHF-M), the official multimodal RL infrastructure developed by OpenRLHF.
 - [2025/3/11] ✨ We release our paper "[LMM-R1: Empowering 3B LMMs with Strong Reasoning Abilities Through Two-Stage Rule-Based RL](https://arxiv.org/pdf/2503.07536)"!
 
@@ -62,9 +63,11 @@ This approach overcomes data limitations while significantly improving performan
 
 ### Installation
 
+#### NVIDIA GPU
+
 ```bash
-git clone https://github.com/TideDra/lmm-r1.git
-cd lmm-r1
+git clone https://github.com/GlowLED/lmm-r1-ascend.git
+cd lmm-r1-ascend
 pip install -e .[vllm]
 pip install flash_attn --no-build-isolation
 ```
@@ -72,6 +75,18 @@ pip install flash_attn --no-build-isolation
 > [!NOTE]
 >We recommend using vLLM 0.7.2 or higher.
 >We also provided the [Dockerfiles for vLLM](./dockerfile/) and [One-Click Installation Script of Nvidia-Docker](./examples/scripts/nvidia_docker_install.sh).
+
+#### Huawei Ascend NPU
+
+```bash
+git clone https://github.com/GlowLED/lmm-r1-ascend.git
+cd lmm-r1-ascend
+pip install -e .
+# flash_attn is NOT required — the framework automatically falls back to PyTorch SDPA
+# Ensure torch_npu and vllm_ascend are pre-installed in your Ascend environment
+```
+
+See [Ascend NPU Support](#ascend-npu-support) for detailed setup and usage.
 
 ### Prepare Datasets
 
@@ -148,6 +163,55 @@ bash examples/scripts/lmm_r1/train_direct_rl_geo.sh
 
 These scripts train the baseline model directly on domain-specific data, skipping the FRE stage, which helps demonstrate the effectiveness of our two-stage approach.
 
+## Ascend NPU Support
+
+LMM-R1 provides first-class support for **Huawei Ascend NPUs**, enabling the full RL training pipeline (rollout → reward → train → weight sync) to run on Ascend hardware without NVIDIA GPUs.
+
+### Verified Environment
+
+| Component | Version |
+|---|---|
+| Ascend NPU | Atlas 300I Pro / Atlas 800 (~64GB HBM) |
+| CANN | 8.5.0 |
+| torch + torch_npu | 2.9.0 |
+| vLLM + vllm_ascend | v0.14.1 |
+| Model | Qwen2.5-VL-3B-Instruct |
+
+### Key Adaptations
+
+- **Device abstraction layer** (`openrlhf/utils/device_utils.py`): All `torch.cuda.*` calls are replaced with device-agnostic APIs that auto-detect NPU/CUDA.
+- **flash_attn compatibility** (`openrlhf/utils/flash_attn_compat.py`): Pure PyTorch SDPA fallbacks — `flash_attn` is not required.
+- **ATB operator fallbacks**: Complete fallback table for ATB ops (`_npu_flash_attention_unpad`, `_npu_matmul_add_fp32`, `_npu_reshape_and_cache`) when NNAL is not installed.
+- **Communication backend**: Auto-selects HCCL (NPU) or NCCL (CUDA); gloo-based weight broadcast with CPU intermediary for Actor→vLLM sync.
+- **Qwen2.5-VL patches**: Adaptive `embed_tokens` lookup, `get_rope_index` fallback, Conv3d backward safety.
+
+### Quick Start (Ascend)
+
+```bash
+# Single-NPU sanity check (100 samples, 1 epoch)
+bash examples/scripts/lmm_r1/train_fre_text_1npu.sh
+
+# Interactive chat with trained model
+python3 -m openrlhf.cli.interactive_chat \
+    --pretrain /path/to/checkpoint \
+    --bf16 --apply_chat_template --max_len 2048
+```
+
+> **Note**: Use absolute paths for `--pretrain` to avoid HuggingFace repo_id validation errors.
+
+For full documentation, see [docs/ascend/](./docs/ascend/).
+
+### Current Status
+
+| Capability | Status |
+|---|---|
+| Single-NPU PPO/REINFORCE++ training | ✅ Verified |
+| vLLM inference on Ascend | ✅ Verified |
+| Weight broadcast (Actor → vLLM) | ✅ Verified |
+| Multi-NPU distributed training | 🔄 In progress |
+| Multimodal (image/video) inference | 🔄 In progress |
+| Ring Attention (`ring_attn_size > 1`) | ❌ Not supported (requires CUDA-only ring_flash_attn) |
+
 ## Features
 
 
@@ -157,13 +221,14 @@ LMM-R1 is a fork of [OpenRLHF](https://github.com/OpenRLHF/OpenRLHF), aimed at p
 
 
 - Support LMM training (Qwen2.5-VL, Phi3.5-V, Phi4-Multimodal).
+- **Huawei Ascend NPU support** — full PPO training pipeline verified on Ascend 910B.
 - Distributed [PPO](./examples/scripts/train_ppo_llama_ray.sh) and [REINFORCE++/RLOO](./examples/scripts/train_reinforce_llama_ray.sh) implementations based on Ray.  
 - [Ray-based Reinforced Finetuning](./examples/scripts/train_ppo_llama_with_reward_fn.sh)
 - Support Ray-based [PPO](./examples/scripts/train_ppo_llama_ray_hybrid_engine.sh) and [REINFORCE++/RLOO](./examples/scripts/train_reinforce_llama_ray_hybrid_engine.sh) using Hybrid Engine  (`--colocate_all_models`, `--vllm_enable_sleep` and `--vllm_gpu_memory_utilization 0.5`)
 - Full RLHF fine-tuning support for models with [over 70 billion parameters](./examples/scripts/train_ppo_llama_ray_70b.sh).  
 - Integration with vLLM for accelerated generation in RLHF tasks (`--vllm_num_engines`).  
 - Support for multiple reward models (`--reward_pretrain model1,model2...`) and remote reward models (`--remote_rm_url`).
-- Integration of FlashAttention2 (`--flash_attn`).  
+- FlashAttention2 on CUDA (`--flash_attn`) with automatic SDPA fallback on Ascend NPU.  
 - Support for QLoRA (`--load_in_4bit`) and [LoRA](./examples/scripts/train_sft_mixtral_lora.sh) (`--lora_rank`, `--target_modules`).  
 - Logging support with Wandb (`--use_wandb`) and TensorBoard (`--use_tensorboard`).  
 - Checkpoint recovery functionality (`--load_checkpoint` and `--save_steps`).  

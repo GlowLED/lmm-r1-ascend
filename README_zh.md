@@ -6,19 +6,19 @@
 
 <div align="center">
 <p align="center">
-      <a href="https://github.com/TideDra/lmm-r1/graphs/contributors">
-        <img alt="GitHub Contributors" src="https://img.shields.io/github/contributors/TideDra/lmm-r1" />
+      <a href="https://github.com/GlowLED/lmm-r1-ascend/graphs/contributors">
+        <img alt="GitHub Contributors" src="https://img.shields.io/github/contributors/GlowLED/lmm-r1-ascend" />
       </a>
-      <a href="https://github.com/TideDra/lmm-r1/issues">
-        <img alt="Issues" src="https://img.shields.io/github/issues/TideDra/lmm-r1?color=0088ff" />
+      <a href="https://github.com/GlowLED/lmm-r1-ascend/issues">
+        <img alt="Issues" src="https://img.shields.io/github/issues/GlowLED/lmm-r1-ascend?color=0088ff" />
       </a>
-      <a href="https://github.com/TideDra/lmm-r1/discussions">
-        <img alt="Issues" src="https://img.shields.io/github/discussions/TideDra/lmm-r1?color=0088ff" />
+      <a href="https://github.com/GlowLED/lmm-r1-ascend/discussions">
+        <img alt="Issues" src="https://img.shields.io/github/discussions/GlowLED/lmm-r1-ascend?color=0088ff" />
       </a>
-      <a href="https://github.com/TideDra/lmm-r1/pulls">
-        <img alt="GitHub pull requests" src="https://img.shields.io/github/issues-pr/TideDra/lmm-r1?color=0088ff" />
-      <a href="https://github.com/TideDra/lmm-r1/stargazers">
-        <img alt="GitHub stars" src="https://img.shields.io/github/stars/TideDra/lmm-r1?color=ccf" />
+      <a href="https://github.com/GlowLED/lmm-r1-ascend/pulls">
+        <img alt="GitHub pull requests" src="https://img.shields.io/github/issues-pr/GlowLED/lmm-r1-ascend?color=0088ff" />
+      <a href="https://github.com/GlowLED/lmm-r1-ascend/stargazers">
+        <img alt="GitHub stars" src="https://img.shields.io/github/stars/GlowLED/lmm-r1-ascend?color=ccf" />
       </a>
       <br>
       <em>开源 / 全面 / 轻量 / 易用</em>
@@ -33,6 +33,7 @@
 [切换到英文版 (Switch to English version)](/README.md)
 
 ## 新闻
+- [2026/3/17] 🔧 **昇腾 NPU 支持**：LMM-R1 现已支持在华为昇腾 NPU 上运行。单卡 PPO/REINFORCE++ 训练全流程已验证（Qwen2.5-VL-3B）。详见 [昇腾 NPU 支持](#昇腾-npu-支持)。
 - [2025/3/11] 🚀 我们的代码被合并进了[OpenRLHF-M](https://github.com/OpenRLHF/OpenRLHF-M), 由OpenRLHF官方开发的多模态强化学习框架。
 - [2025/3/11] ✨ 我们发布了论文 "[LMM-R1: 通过两阶段规则型强化学习增强3B大型多模态模型的推理能力](https://arxiv.org/pdf/2503.07536)"！
 
@@ -62,16 +63,30 @@
 
 ### 安装
 
+#### NVIDIA GPU
+
 ```bash
-git clone https://github.com/TideDra/lmm-r1.git
-cd lmm-r1
+git clone https://github.com/GlowLED/lmm-r1-ascend.git
+cd lmm-r1-ascend
 pip install -e .[vllm]
 pip install flash_attn --no-build-isolation
 ```
 
-> [!注意]
+> [注意]
 >我们推荐使用vLLM 0.7.2或更高版本。
 >我们还提供了[vLLM的Docker文件](./dockerfile/)和[Nvidia-Docker一键安装脚本](./examples/scripts/nvidia_docker_install.sh)。
+
+#### 华为昇腾 NPU
+
+```bash
+git clone https://github.com/GlowLED/lmm-r1-ascend.git
+cd lmm-r1-ascend
+pip install -e .
+# flash_attn 不是必需的 — 框架会自动回退到 PyTorch SDPA
+# 确保昇腾环境中已预装 torch_npu 和 vllm_ascend
+```
+
+详见 [昇腾 NPU 支持](#昇腾-npu-支持) 获取完整配置与使用说明。
 
 ### 准备数据集
 
@@ -148,6 +163,55 @@ bash examples/scripts/lmm_r1/train_direct_rl_geo.sh
 
 这些脚本直接在特定领域数据上训练基线模型，跳过FRE阶段，这有助于展示我们两阶段方法的有效性。
 
+## 昇腾 NPU 支持
+
+LMM-R1 提供对**华为昇腾 NPU** 的原生支持，完整的强化学习训练流水线（rollout → reward → train → weight sync）可在昇腾硬件上运行，无需 NVIDIA GPU。
+
+### 已验证环境
+
+| 组件 | 版本 |
+|---|---|
+| Ascend NPU | Atlas 300I Pro / Atlas 800 (~64GB HBM) |
+| CANN | 8.5.0 |
+| torch + torch_npu | 2.9.0 |
+| vLLM + vllm_ascend | v0.14.1 |
+| 模型 | Qwen2.5-VL-3B-Instruct |
+
+### 核心适配
+
+- **设备抽象层** (`openrlhf/utils/device_utils.py`)：所有 `torch.cuda.*` 调用替换为设备无关 API，自动检测 NPU/CUDA。
+- **flash_attn 兼容层** (`openrlhf/utils/flash_attn_compat.py`)：纯 PyTorch SDPA 回退实现，`flash_attn` 不是必需的。
+- **ATB 算子 fallback**：在未安装 NNAL 时，为所有 ATB 算子提供完整的 fallback 表（`_npu_flash_attention_unpad`、`_npu_matmul_add_fp32`、`_npu_reshape_and_cache`）。
+- **通信后端**：自动选择 HCCL（NPU）或 NCCL（CUDA）；gloo 后端通过 CPU 中转实现 Actor→vLLM 权重同步。
+- **Qwen2.5-VL 补丁**：自适应 `embed_tokens` 查找、`get_rope_index` 回退、Conv3d backward 安全保护。
+
+### 快速开始（昇腾）
+
+```bash
+# 单卡正确性验证（100 条数据，1 epoch）
+bash examples/scripts/lmm_r1/train_fre_text_1npu.sh
+
+# 交互式对话测试训练后模型
+python3 -m openrlhf.cli.interactive_chat \
+    --pretrain /path/to/checkpoint \
+    --bf16 --apply_chat_template --max_len 2048
+```
+
+> **注意**：`--pretrain` 请使用绝对路径，避免 HuggingFace 的 repo_id 校验报错。
+
+完整文档请参见 [docs/ascend/](./docs/ascend/)。
+
+### 当前状态
+
+| 能力 | 状态 |
+|---|---|
+| 单卡 PPO/REINFORCE++ 训练 | ✅ 已验证 |
+| 昇腾上 vLLM 推理 | ✅ 已验证 |
+| 权重广播（Actor → vLLM） | ✅ 已验证 |
+| 多卡分布式训练 | 🔄 进行中 |
+| 多模态（图像/视频）推理 | 🔄 进行中 |
+| Ring Attention (`ring_attn_size > 1`) | ❌ 不支持（依赖 CUDA 专用 ring_flash_attn） |
+
 ## 功能特点
 
 LMM-R1是[OpenRLHF](https://github.com/OpenRLHF/OpenRLHF)的一个分支，旨在提供高性能的LMM强化学习基础设施，以增强多模态推理能力。我们目前支持LMM的PPO/REINFORCE++/RLOO训练，并且与[R1-V](https://github.com/Deep-Agent/R1-V)(GRPO)相比，实现了4.7倍的加速(RLOO)。
@@ -155,15 +219,15 @@ LMM-R1是[OpenRLHF](https://github.com/OpenRLHF/OpenRLHF)的一个分支，旨�
 ![time_compare](./docs/time_compare.jpg)
 
 - 支持LMM训练(Qwen2-VL, Qwen2.5-VL)
+- **华为昇腾 NPU 支持** — 单卡 PPO 训练全流程已在昇腾 910B 上验证
 - 基于Ray的分布式[PPO](./examples/scripts/train_ppo_llama_ray.sh)和[REINFORCE++/RLOO](./examples/scripts/train_reinforce_llama_ray.sh)实现
 - [基于Ray的强化微调](./examples/scripts/train_ppo_llama_with_reward_fn.sh)
 - 支持使用混合引擎的基于Ray的[PPO](./examples/scripts/train_ppo_llama_ray_hybrid_engine.sh)和[REINFORCE++/RLOO](./examples/scripts/train_reinforce_llama_ray_hybrid_engine.sh)(`--colocate_all_models`, `--vllm_enable_sleep`和`--vllm_gpu_memory_utilization 0.5`)
 - 完全支持[超过700亿参数模型](./examples/scripts/train_ppo_llama_ray_70b.sh)的RLHF微调
 - 集成vLLM以加速RLHF任务中的生成(`--vllm_num_engines`)
 - 支持多个奖励模型(`--reward_pretrain model1,model2...`)和远程奖励模型(`--remote_rm_url`)
-- 集成FlashAttention2(`--flash_attn`)
+- CUDA 上 FlashAttention2 (`--flash_attn`)，昇腾 NPU 上自动回退到 SDPA
 - 支持QLoRA(`--load_in_4bit`)和[LoRA](./examples/scripts/train_sft_mixtral_lora.sh)(`--lora_rank`, `--target_modules`)
-- 兼容HuggingFace的`tokenizer.apply_chat_template`用于数据集(`--apply_chat_template`和`--input_key`)
 - 支持Wandb(`--use_wandb`)和TensorBoard(`--use_tensorboard`)日志记录
 - 检查点恢复功能(`--load_checkpoint`和`--save_steps`)
 - 提供多节点训练脚本，如[Ray PPO](./examples/scripts/train_ppo_llama_ray_slurm.sh)
